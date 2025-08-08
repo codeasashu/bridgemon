@@ -13,6 +13,10 @@
  ***/
 
 
+#ifndef AST_MODULE
+#define AST_MODULE "FindPeer"
+#endif
+
 #include "asterisk.h"
 #include "asterisk/module.h"
 #include "asterisk/channel.h"
