@@ -40,6 +40,7 @@
 #include "asterisk/app.h"
 #include "asterisk/channel.h"
 #include "asterisk/bridge.h"
+#include "asterisk/bridge_channel.h"
 #include "asterisk/bridge_features.h"
 #include "asterisk/astobj2.h"
 #include "asterisk/manager.h"
@@ -151,19 +152,23 @@ static int bridgemon_hook_callback(struct ast_bridge_channel *bridge_channel, vo
 
 	/* Check if this is the monitored channel joining */
 	if (bridge_channel->chan == monitored_channel) {
-		/* Find the peer channel in the bridge */
-		peer_channel = ast_bridge_peer_channel(bridge_channel);
-		if (peer_channel) {
-			/* Get the peer channel's unique ID */
-			ast_copy_string(peer_id, ast_channel_uniqueid(peer_channel), sizeof(peer_id));
-			
-			/* Set the BRIDGEPEERID channel variable */
-			ast_channel_lock(monitored_channel);
-			pbx_builtin_setvar_helper(monitored_channel, "BRIDGEPEERID", peer_id);
-			ast_channel_unlock(monitored_channel);
-			
-			ast_verb(2, "BridgeMon: Set BRIDGEPEERID=%s for channel %s\n", 
-				peer_id, ast_channel_name(monitored_channel));
+		/* Find the peer bridge channel in the bridge */
+		struct ast_bridge_channel *peer_bridge_channel = ast_bridge_channel_peer(bridge_channel);
+		if (peer_bridge_channel) {
+			/* Get the peer channel from the bridge channel */
+			peer_channel = ast_bridge_channel_get_chan(peer_bridge_channel);
+			if (peer_channel) {
+				/* Get the peer channel's unique ID */
+				ast_copy_string(peer_id, ast_channel_uniqueid(peer_channel), sizeof(peer_id));
+				
+				/* Set the BRIDGEPEERID channel variable */
+				ast_channel_lock(monitored_channel);
+				pbx_builtin_setvar_helper(monitored_channel, "BRIDGEPEERID", peer_id);
+				ast_channel_unlock(monitored_channel);
+				
+				ast_verb(2, "BridgeMon: Set BRIDGEPEERID=%s for channel %s\n", 
+					peer_id, ast_channel_name(monitored_channel));
+			}
 		}
 	}
 

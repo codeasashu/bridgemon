@@ -21,22 +21,16 @@ CC:=gcc
 OPTIMIZE:=-O2
 DEBUG:=-g
 
-#LIBS+=-
-CFLAGS+=-pipe -fPIC -Wall -Wextra -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations -D_REENTRANT -D_GNU_SOURCE -DAST_MODULE_SELF_SYM=__internal_app_audiofork_self
+#LIBS+=/usr/src/asterisk/include
+CFLAGS+=-pipe -I/usr/src/asterisk/include -fPIC -Wall -Wextra -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations -D_REENTRANT -D_GNU_SOURCE -DAST_MODULE_SELF_SYM=__internal_app_audiofork_self
 
-all: app_audiofork.so app_bridgemon.so
+all: app_bridgemon.so
 	@echo " +-------- Asterisk Modules Build Complete --------+"
-	@echo " + app_audiofork and app_bridgemon have been built, +"
+	@echo " + app_bridgemon have been built, +"
 	@echo " + and can be installed by running:              +"
 	@echo " +                                               +"
 	@echo " +               make install                    +"
 	@echo " +-----------------------------------------------+"
-
-app_audiofork.o: app_audiofork.c
-	$(CC) $(CFLAGS) $(DEBUG) $(OPTIMIZE) -c -o $@ $*.c
-
-app_audiofork.so: app_audiofork.o
-	$(CC) -shared -Xlinker -x -o $@ $< $(LIBS)
 
 app_bridgemon.o: app_bridgemon.c
 	$(CC) $(CFLAGS) $(DEBUG) $(OPTIMIZE) -c -o $@ $*.c
@@ -45,15 +39,14 @@ app_bridgemon.so: app_bridgemon.o
 	$(CC) -shared -Xlinker -x -o $@ $< $(LIBS)
 
 clean:
-	rm -f app_audiofork.o app_audiofork.so app_bridgemon.o app_bridgemon.so
+	rm -f app_bridgemon.o app_bridgemon.so
 
 install: all
 	$(INSTALL) -m 755 -d $(DESTDIR)$(MODULES_DIR)
-	$(INSTALL) -m 755 app_audiofork.so $(DESTDIR)$(MODULES_DIR)
 	$(INSTALL) -m 755 app_bridgemon.so $(DESTDIR)$(MODULES_DIR)
 	@echo " +---- Asterisk Modules Installation Complete -----+"
 	@echo " +                                               +"
-	@echo " + app_audiofork and app_bridgemon have been     +"
+	@echo " + app_bridgemon have been     +"
 	@echo " + successfully installed                         +"
 	@echo " + If you would like to install the sample      +"
 	@echo " + configuration file run:                       +"
