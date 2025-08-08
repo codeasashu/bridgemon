@@ -13,7 +13,6 @@
 
 #include "asterisk.h"
 
-#include "asterisk/file.h"
 #include "asterisk/module.h"
 #include "asterisk/channel.h"
 
@@ -33,46 +32,44 @@ static const char app[] = "FindPeer";
 
 static int findpeer_exec(struct ast_channel *chan, const char *data)
 {
-	while (ast_waitfor(chan, -1) > -1) {
-		struct ast_frame *f = ast_read(chan);
-		if (!f) {
-			break;
-		}
-		f->delivery.tv_sec = 0;
-		f->delivery.tv_usec = 0;
-		if (f->frametype == AST_FRAME_CONTROL
-			&& f->subclass.integer == AST_CONTROL_VIDUPDATE
-			&& !fir_sent) {
-			if (ast_write(chan, f) < 0) {
-				ast_frfree(f);
-				goto end;
-			}
-			fir_sent = 1;
-		}
-		if (!fir_sent && f->frametype == AST_FRAME_VIDEO) {
-			struct ast_frame frame = {
-				.frametype = AST_FRAME_CONTROL,
-				.subclass.integer = AST_CONTROL_VIDUPDATE,
-			};
-			ast_write(chan, &frame);
-			fir_sent = 1;
-		}
-		if (f->frametype != AST_FRAME_CONTROL
-			&& f->frametype != AST_FRAME_MODEM
-			&& f->frametype != AST_FRAME_NULL
-			&& ast_write(chan, f)) {
-			ast_frfree(f);
-			goto end;
-		}
-		if ((f->frametype == AST_FRAME_DTMF) && (f->subclass.integer == '#')) {
-			res = 0;
-			ast_frfree(f);
-			goto end;
-		}
-		ast_frfree(f);
+	struct ast_channel *tchan;
+    char buf[64];
+    char peer_id[64];
+
+	if (!chan)
+		return 0;
+
+    // 		chan = ast_channel_get_by_name(channel_id);
+    //
+	// parker = ast_channel_get_by_name(data->parker_uuid);
+	// if (!parker) {
+	// 	return;
+	// }
+	//
+
+	if (ast_strlen_zero(ast_channel_linkedid(chan))) {
+	    ast_verb(2, "FindPeer: [%s] empty linkedid, skipping\n",
+		    ast_channel_name(chan));
+        return 0;
+    }
+
+	ast_verb(2, "FindPeer: handling chan=%s, linkedid=%s\n",
+		ast_channel_name(chan), ast_channel_linkedid(chan));
+
+	ast_copy_string(buf, ast_channel_linkedid(chan), sizeof(buf));
+	tchan = ast_channel_get_by_name(buf);
+	if (!tchan) {
+	    ast_verb(2, "FindPeer: [%s] error finding target chan %s\n",
+		    ast_channel_name(chan), buf);
+
+		return 0;
 	}
-end:
-	return res;
+
+	ast_copy_string(peer_id, ast_channel_uniqueid(chan), sizeof(peer_id));
+	ast_channel_lock(tchan);
+	pbx_builtin_setvar_helper(tchan, "BRIDGEPEERID", peer_id);
+	ast_channel_unlock(tchan);
+    return 0;
 }
 
 static int unload_module(void)
