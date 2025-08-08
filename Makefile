@@ -22,7 +22,7 @@ OPTIMIZE:=-O2
 DEBUG:=-g
 
 #LIBS+=/usr/src/asterisk/include
-CFLAGS+=-pipe -I/usr/src/asterisk/include -fPIC -Wall -Wextra -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations -D_REENTRANT -D_GNU_SOURCE -DAST_MODULE_SELF_SYM=__internal_app_audiofork_self
+CFLAGS+=-pipe -I/Users/ashutosh/code/personal/asterisk/include -fPIC -Wall -Wextra -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations -D_REENTRANT -D_GNU_SOURCE -DAST_MODULE_SELF_SYM=__internal_app_bridgemon_self
 
 all: app_bridgemon.so
 	@echo " +-------- Asterisk Modules Build Complete --------+"
