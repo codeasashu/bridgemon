@@ -1,18 +1,19 @@
 /*! \file
  *
- * \brief Echo application -- play back what you hear to evaluate latency
- *
- * \author Mark Spencer <markster@digium.com>
- *
+ * \brief FindPeer() - Monitor bridge events and set BRIDGEPEERID channel variable.
  * \ingroup applications
+ *
+ * \author Ashutosh
+ *
+ * \note Based on app_confbridge.c
  */
 
 /*** MODULEINFO
 	<support_level>core</support_level>
  ***/
 
-#include "asterisk.h"
 
+#include "asterisk.h"
 #include "asterisk/module.h"
 #include "asterisk/channel.h"
 
