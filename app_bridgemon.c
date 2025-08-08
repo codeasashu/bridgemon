@@ -97,12 +97,6 @@ struct bridgemon_data {
 	int active;
 };
 
-/* Bridge hook callback data */
-struct bridgemon_hook_data {
-	struct bridgemon_data *bridgemon_data;
-	enum ast_bridge_hook_type hook_type;
-};
-
 /* Datastore to track bridge monitoring sessions */
 struct bridgemon_ds {
 	struct bridgemon_data *bridgemon_data;
@@ -130,45 +124,75 @@ static const struct ast_datastore_info bridgemon_ds_info = {
 /* Bridge hook callback function */
 static int bridgemon_hook_callback(struct ast_bridge_channel *bridge_channel, void *data)
 {
-	struct bridgemon_hook_data *hook_data = data;
-	struct bridgemon_data *bridgemon_data = hook_data->bridgemon_data;
+	struct bridgemon_data *bridgemon_data = data;
 	struct ast_channel *monitored_channel;
 	struct ast_channel *peer_channel;
 	char peer_id[64];
 
 	if (!bridgemon_data || !bridgemon_data->active) {
+		ast_verb(2, "BridgeMon: Hook callback - bridgemon_data is NULL or not active\n");
 		return 0;
 	}
 
 	monitored_channel = bridgemon_data->monitored_channel;
 	if (!monitored_channel) {
+		ast_verb(2, "BridgeMon: Hook callback - monitored_channel is NULL\n");
 		return 0;
 	}
 
-	/* Only process join events */
-	if (hook_data->hook_type != AST_BRIDGE_HOOK_TYPE_JOIN) {
-		return 0;
-	}
+	/* Debug: Log the channel info */
+	ast_verb(2, "BridgeMon: Hook callback - monitored_channel=%s, bridge_channel->chan=%s\n",
+		ast_channel_name(monitored_channel), 
+		bridge_channel->chan ? ast_channel_name(bridge_channel->chan) : "NULL");
+	
+	/* Debug: Log the channel IDs for comparison */
+	ast_verb(2, "BridgeMon: Hook callback [source=%s] - chan=%s joined bridge\n",
+		ast_channel_uniqueid(monitored_channel), 
+		bridge_channel->chan ? ast_channel_uniqueid(bridge_channel->chan) : "NULL");
 
 	/* Check if this is the monitored channel joining */
 	if (bridge_channel->chan == monitored_channel) {
 		/* Find the peer bridge channel in the bridge */
 		struct ast_bridge_channel *peer_bridge_channel = ast_bridge_channel_peer(bridge_channel);
 		if (peer_bridge_channel) {
+			ast_verb(2, "BridgeMon: Hook callback - found peer bridge channel\n");
+			
 			/* Get the peer channel from the bridge channel */
 			peer_channel = ast_bridge_channel_get_chan(peer_bridge_channel);
 			if (peer_channel) {
+				ast_verb(2, "BridgeMon: Hook callback - found peer channel: %s\n", ast_channel_name(peer_channel));
+				
 				/* Get the peer channel's unique ID */
 				ast_copy_string(peer_id, ast_channel_uniqueid(peer_channel), sizeof(peer_id));
 				
-				/* Set the BRIDGEPEERID channel variable */
 				ast_channel_lock(monitored_channel);
 				pbx_builtin_setvar_helper(monitored_channel, "BRIDGEPEERID", peer_id);
 				ast_channel_unlock(monitored_channel);
 				
-				ast_verb(2, "BridgeMon: Set BRIDGEPEERID=%s for channel %s\n", 
-					peer_id, ast_channel_name(monitored_channel));
+				ast_verb(2, "BridgeMon: Set BRIDGEPEERID=%s and BRIDGEMON_CHANNEL_ID=%s for monitored channel %s (source channel)\n", 
+					peer_id, peer_id, ast_channel_name(monitored_channel));
+			} else {
+				ast_verb(2, "BridgeMon: Hook callback - failed to get peer channel from bridge channel\n");
 			}
+		}
+	} else {
+		/* This is the peer channel joining - check if the monitored channel is already in the bridge */
+		ast_verb(2, "BridgeMon: Hook callback - peer channel is joining the bridge\n");
+		
+		/* Find the monitored channel in the bridge */
+		struct ast_bridge_channel *monitored_bridge_channel = ast_bridge_channel_peer(bridge_channel);
+		if (monitored_bridge_channel && monitored_bridge_channel->chan == monitored_channel) {
+			ast_copy_string(peer_id, ast_channel_uniqueid(bridge_channel->chan), sizeof(peer_id));
+			
+			/* Set the BRIDGEPEERID channel variable on the MONITORED channel (source channel) */
+			ast_channel_lock(monitored_channel);
+			pbx_builtin_setvar_helper(monitored_channel, "BRIDGEPEERID", peer_id);
+			ast_channel_unlock(monitored_channel);
+			
+			ast_verb(2, "BridgeMon: [chan=%s] SetVar BRIDGEPEERID=%s\n", 
+				ast_channel_name(monitored_channel), peer_id);
+		} else {
+			ast_verb(2, "BridgeMon: Hook callback - monitored channel not found in bridge\n");
 		}
 	}
 
@@ -226,12 +250,16 @@ static int setup_bridgemon_ds(struct bridgemon_data *bridgemon_data, struct ast_
 static int start_bridgemon(struct ast_channel *chan, const char *channel_id)
 {
 	struct bridgemon_data *bridgemon_data;
-	struct bridgemon_hook_data *hook_data;
 	char *datastore_id = NULL;
 	int res = 0;
 
+	/* Debug: Start monitoring function called */
+	ast_verb(2, "BridgeMon: start_bridgemon called for channel %s (ID: %s)\n", 
+		ast_channel_name(chan), channel_id);
+
 	/* Allocate bridge monitoring data */
 	if (!(bridgemon_data = ast_calloc(1, sizeof(*bridgemon_data)))) {
+		ast_log(LOG_ERROR, "BridgeMon: Failed to allocate bridgemon_data\n");
 		return -1;
 	}
 
@@ -254,27 +282,18 @@ static int start_bridgemon(struct ast_channel *chan, const char *channel_id)
 		return -1;
 	}
 
-	/* Allocate hook data for join events */
-	hook_data = ast_malloc(sizeof(*hook_data));
-	if (!hook_data) {
-		ast_free(datastore_id);
-		bridgemon_data_free(bridgemon_data);
-		return -1;
-	}
-
-	hook_data->bridgemon_data = bridgemon_data;
-	hook_data->hook_type = AST_BRIDGE_HOOK_TYPE_JOIN;
-
 	/* Add bridge join hook */
 	res = ast_bridge_join_hook(&bridgemon_data->features, bridgemon_hook_callback,
-		hook_data, ast_free_ptr, 0);
+		bridgemon_data, NULL, 0);
 	if (res) {
-		ast_free(hook_data);
 		ast_free(datastore_id);
 		bridgemon_data_free(bridgemon_data);
 		ast_log(LOG_ERROR, "Couldn't add bridge join hook for channel '%s'\n", ast_channel_name(chan));
 		return -1;
 	}
+
+	/* Attach bridge features to the channel so hooks get called */
+	ast_channel_feature_hooks_replace(chan, &bridgemon_data->features);
 
 	ast_verb(2, "BridgeMon: Started monitoring bridge events for channel %s (ID: %s)\n", 
 		ast_channel_name(chan), channel_id);
@@ -324,6 +343,10 @@ static int bridgemon_exec(struct ast_channel *chan, const char *data)
 	char *parse;
 	AST_DECLARE_APP_ARGS(args, AST_APP_ARG(channel_id););
 
+	/* Debug: App is being called */
+	ast_verb(2, "BridgeMon: App called for channel %s with data: %s\n", 
+		ast_channel_name(chan), S_OR(data, "NULL"));
+
 	if (ast_strlen_zero(data)) {
 		ast_log(LOG_WARNING, "BridgeMon requires a channel ID argument\n");
 		return -1;
@@ -336,6 +359,9 @@ static int bridgemon_exec(struct ast_channel *chan, const char *data)
 		ast_log(LOG_WARNING, "BridgeMon requires a channel ID argument\n");
 		return -1;
 	}
+
+	ast_verb(2, "BridgeMon: Starting monitoring for channel %s (ID: %s)\n", 
+		ast_channel_name(chan), args.channel_id);
 
 	/* Start monitoring bridge events for this channel */
 	return start_bridgemon(chan, args.channel_id);
@@ -488,11 +514,19 @@ static int load_module(void)
 {
 	int res;
 
+	ast_verb(2, "BridgeMon: Module loading...\n");
+
 	ast_cli_register_multiple(cli_bridgemon, ARRAY_LEN(cli_bridgemon));
 	res = ast_register_application_xml(app, bridgemon_exec);
 	res |= ast_register_application_xml(stop_app, stop_bridgemon_exec);
 	res |= ast_manager_register_xml("BridgeMon", EVENT_FLAG_SYSTEM, manager_bridgemon);
 	res |= ast_manager_register_xml("StopBridgeMon", EVENT_FLAG_SYSTEM, manager_stop_bridgemon);
+
+	if (res == 0) {
+		ast_verb(2, "BridgeMon: Module loaded successfully\n");
+	} else {
+		ast_verb(2, "BridgeMon: Module load failed with error %d\n", res);
+	}
 
 	return res;
 }
