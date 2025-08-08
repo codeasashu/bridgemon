@@ -321,6 +321,9 @@ static int start_bridgemon(struct ast_channel *chan, const char *channel_id)
 		return -1;
 	}
 
+	/* Attach bridge features to the channel so hooks get called */
+	ast_channel_feature_hooks_replace(chan, &bridgemon_data->features);
+
 	/* Debug: Set channel variable to indicate hook was added */
 	ast_channel_lock(chan);
 	pbx_builtin_setvar_helper(chan, "BRIDGEMON_HOOK_ADDED", "1");
