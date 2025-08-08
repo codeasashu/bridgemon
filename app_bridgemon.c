@@ -83,4 +83,11 @@ static int load_module(void)
 	return ast_register_application_xml(app, findpeer_exec);
 }
 
-AST_MODULE_INFO_STANDARD(ASTERISK_GPL_KEY, "Simple Peer Finder");
+AST_MODULE_INFO(
+	ASTERISK_GPL_KEY, 
+	AST_MODFLAG_DEFAULT,
+	"Find Peer application",
+	.support_level = AST_MODULE_SUPPORT_CORE,
+	.load = load_module,
+	.unload = unload_module,
+);
