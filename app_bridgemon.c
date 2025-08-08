@@ -147,6 +147,11 @@ static int bridgemon_hook_callback(struct ast_bridge_channel *bridge_channel, vo
 	ast_verb(2, "BridgeMon: Hook callback - monitored_channel=%s, bridge_channel->chan=%s\n",
 		ast_channel_name(monitored_channel), 
 		bridge_channel->chan ? ast_channel_name(bridge_channel->chan) : "NULL");
+	
+	/* Debug: Log the channel IDs for comparison */
+	ast_verb(2, "BridgeMon: Hook callback - monitored_channel_id=%s, bridge_channel->chan_id=%s\n",
+		ast_channel_uniqueid(monitored_channel), 
+		bridge_channel->chan ? ast_channel_uniqueid(bridge_channel->chan) : "NULL");
 
 	/* Check if this is the monitored channel joining */
 	if (bridge_channel->chan == monitored_channel) {
@@ -170,23 +175,45 @@ static int bridgemon_hook_callback(struct ast_bridge_channel *bridge_channel, vo
 				/* Get the peer channel's unique ID */
 				ast_copy_string(peer_id, ast_channel_uniqueid(peer_channel), sizeof(peer_id));
 				
-				/* Set the BRIDGEPEERID channel variable */
+				/* Set the BRIDGEPEERID channel variable on the MONITORED channel (source channel) */
 				ast_channel_lock(monitored_channel);
 				pbx_builtin_setvar_helper(monitored_channel, "BRIDGEPEERID", peer_id);
 				pbx_builtin_setvar_helper(monitored_channel, "BRIDGEMON_PEER_FOUND", "1");
 				pbx_builtin_setvar_helper(monitored_channel, "BRIDGEMON_PEER_NAME", ast_channel_name(peer_channel));
 				ast_channel_unlock(monitored_channel);
 				
-				ast_verb(2, "BridgeMon: Set BRIDGEPEERID=%s for channel %s\n", 
+				ast_verb(2, "BridgeMon: Set BRIDGEPEERID=%s for monitored channel %s (source channel)\n", 
 					peer_id, ast_channel_name(monitored_channel));
 			} else {
 				ast_verb(2, "BridgeMon: Hook callback - failed to get peer channel from bridge channel\n");
 			}
 		} else {
-			ast_verb(2, "BridgeMon: Hook callback - no peer bridge channel found\n");
+			ast_verb(2, "BridgeMon: Hook callback - no peer bridge channel found (monitored channel joined first)\n");
 		}
 	} else {
-		ast_verb(2, "BridgeMon: Hook callback - this is not the monitored channel joining\n");
+		/* This is the peer channel joining - check if the monitored channel is already in the bridge */
+		ast_verb(2, "BridgeMon: Hook callback - peer channel is joining the bridge\n");
+		
+		/* Find the monitored channel in the bridge */
+		struct ast_bridge_channel *monitored_bridge_channel = ast_bridge_channel_peer(bridge_channel);
+		if (monitored_bridge_channel && monitored_bridge_channel->chan == monitored_channel) {
+			ast_verb(2, "BridgeMon: Hook callback - found monitored channel in bridge\n");
+			
+			/* Get the peer channel's unique ID */
+			ast_copy_string(peer_id, ast_channel_uniqueid(bridge_channel->chan), sizeof(peer_id));
+			
+			/* Set the BRIDGEPEERID channel variable on the MONITORED channel (source channel) */
+			ast_channel_lock(monitored_channel);
+			pbx_builtin_setvar_helper(monitored_channel, "BRIDGEPEERID", peer_id);
+			pbx_builtin_setvar_helper(monitored_channel, "BRIDGEMON_PEER_FOUND", "1");
+			pbx_builtin_setvar_helper(monitored_channel, "BRIDGEMON_PEER_NAME", ast_channel_name(bridge_channel->chan));
+			ast_channel_unlock(monitored_channel);
+			
+			ast_verb(2, "BridgeMon: Set BRIDGEPEERID=%s for monitored channel %s (source channel) when peer joined\n", 
+				peer_id, ast_channel_name(monitored_channel));
+		} else {
+			ast_verb(2, "BridgeMon: Hook callback - monitored channel not found in bridge\n");
+		}
 	}
 
 	return 0;
