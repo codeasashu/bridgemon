@@ -37,44 +37,31 @@ static const char app[] = "FindPeer";
 
 static int findpeer_exec(struct ast_channel *chan, const char *data)
 {
-	struct ast_channel *tchan;
-    char buf[64];
-    char peer_id[64];
-
 	if (!chan)
 		return 0;
-
-    // 		chan = ast_channel_get_by_name(channel_id);
-    //
-	// parker = ast_channel_get_by_name(data->parker_uuid);
-	// if (!parker) {
-	// 	return;
-	// }
-	//
 
 	if (ast_strlen_zero(ast_channel_linkedid(chan))) {
 	    ast_verb(2, "FindPeer: [%s] empty linkedid, skipping\n",
 		    ast_channel_name(chan));
-        return 0;
-    }
+        	return 0;
+    	}
 
-	ast_verb(2, "FindPeer: handling chan=%s, linkedid=%s\n",
-		ast_channel_name(chan), ast_channel_linkedid(chan));
-
-	ast_copy_string(buf, ast_channel_linkedid(chan), sizeof(buf));
-	tchan = ast_channel_get_by_name(buf);
-	if (!tchan) {
-	    ast_verb(2, "FindPeer: [%s] error finding target chan %s\n",
-		    ast_channel_name(chan), buf);
-
-		return 0;
+	// const char *linkedid = S_OR(ast_channel_linkedid(chan), "");
+	const char *linkedid = ast_channel_linkedid(chan);
+	if (linkedid) {
+		RAII_VAR(struct ast_channel *, bridge, ast_channel_get_by_name(linkedid), ast_channel_cleanup);
+		if (!bridge) {
+	    	    ast_verb(2, "FindPeer: [%s] no peer found. skipping\n",
+		    	ast_channel_name(chan));
+        	    return 0;
+		}
+		ast_verb(2, "FindPeer4: bridge found peer=%s, bridgepeerid=%s\n",
+			linkedid, ast_channel_uniqueid(chan));
+		ast_channel_lock(bridge);
+		pbx_builtin_setvar_helper(bridge, "BRIDGEPEERID", ast_channel_uniqueid(chan));
+		ast_channel_unlock(bridge);
 	}
-
-	ast_copy_string(peer_id, ast_channel_uniqueid(chan), sizeof(peer_id));
-	ast_channel_lock(tchan);
-	pbx_builtin_setvar_helper(tchan, "BRIDGEPEERID", peer_id);
-	ast_channel_unlock(tchan);
-    return 0;
+    	return 0;
 }
 
 static int unload_module(void)
